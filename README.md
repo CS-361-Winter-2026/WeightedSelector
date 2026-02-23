@@ -19,7 +19,7 @@ Example write:
 ## How to receive selections from WeightedSelector
 Give a number of seconds for WeightedSelector to process and write results 
 back into "weighted_selector.txt" (perhaps with a sleep), then read from text 
-file "weighted_selector.txt". Results will either be a single selected outcome 
+file "weighted_selector.txt". Results will be a single selected outcome 
 string (e.g., Rare). Alternatively if an error occurred an error message in 
 the format "ERROR:[error message]" will be written to the 
 "weighted_selector.txt" file.
