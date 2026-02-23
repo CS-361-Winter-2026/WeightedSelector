@@ -100,6 +100,7 @@ def weighted_select(outcomes, weights):
 def process_request():
     """
     Read request from file, process it, write result back.
+    Returns the result that was written to the file.
     """
     try:
         # read request
@@ -114,7 +115,7 @@ def process_request():
             error_message = result[1]
             with open('weighted_selector.txt', 'w') as f:
                 f.write(error_message)
-            return
+            return error_message  # Return what we wrote
 
         outcomes, weights = result
 
@@ -125,16 +126,20 @@ def process_request():
         with open('weighted_selector.txt', 'w') as f:
             f.write(selected)
 
+        return selected  # Return what we wrote
+
     except FileNotFoundError:
         # file doesn't exist yet, just wait
-        pass
+        return None
     except Exception as e:
         # unexpected error - write generic error message
+        error_msg = "ERROR: Invalid format. Use outcome1:weight1,outcome2:weight2"
         try:
             with open('weighted_selector.txt', 'w') as f:
-                f.write("ERROR: Invalid format. Use outcome1:weight1,outcome2:weight2")
+                f.write(error_msg)
         except:
             pass  # can't even write error, just continue
+        return error_msg
 
 
 def main():
@@ -145,6 +150,7 @@ def main():
     print("Waiting for requests in weighted_selector.txt")
 
     last_request = None
+    last_output = None
 
     while True:
         try:
@@ -154,12 +160,21 @@ def main():
 
             # only process if content changed
             if current_request and current_request != last_request:
-                # check if it's not an error message or result from previous run
-                if not current_request.startswith('ERROR:') and ':' in current_request and ',' in current_request:
-                    print(f"Processing request: {current_request[:50]}...")
-                    process_request()
+                # skip if it's an error message we wrote
+                if current_request.startswith('ERROR:'):
                     last_request = current_request
-                    print("Result written to weighted_selector.txt")
+                    continue
+
+                # skip if it's the output we just wrote
+                if current_request == last_output:
+                    last_request = current_request
+                    continue
+
+                # process the request
+                print(f"Processing request: {current_request[:50]}...")
+                last_output = process_request()  # Store what we wrote
+                last_request = current_request
+                print("Result written to weighted_selector.txt")
 
         except FileNotFoundError:
             # file doesn't exist yet, that's fine
@@ -170,6 +185,7 @@ def main():
 
         # small delay to avoid hammering the file system
         time.sleep(0.1)
+
 
 if __name__ == '__main__':
     main()
