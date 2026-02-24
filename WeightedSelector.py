@@ -4,6 +4,7 @@ Reads weighted outcome requests from weighted_selector.txt and returns one rando
 Format: outcome1:weight1,outcome2:weight2,outcome3:weight3
 """
 
+import os
 import random
 import time
 
@@ -97,24 +98,24 @@ def weighted_select(outcomes, weights):
     return outcomes[-1]
 
 
-def process_request():
+def process_request(request):
     """
-    Read request from file, process it, write result back.
+    Process the given request string and write result to file.
+    Accepts already-read request content to avoid reading the file twice.
     Returns the result that was written to the file.
     """
     try:
-        # read request
-        with open('weighted_selector.txt', 'r') as f:
-            request = f.read()
-
         # parse request
         result = parse_request(request)
 
         if result[0] is None:
             # error occurred
             error_message = result[1]
-            with open('weighted_selector.txt', 'w') as f:
+            with open('weighted_selector.txt', 'w', encoding='utf-8') as f:
                 f.write(error_message)
+                # flush and sync to ensure data is on disk before main program reads
+                f.flush()
+                os.fsync(f.fileno())
             return error_message  # Return what we wrote
 
         outcomes, weights = result
@@ -123,20 +124,23 @@ def process_request():
         selected = weighted_select(outcomes, weights)
 
         # write result
-        with open('weighted_selector.txt', 'w') as f:
+        with open('weighted_selector.txt', 'w', encoding='utf-8') as f:
             f.write(selected)
+            # flush and sync to ensure data is on disk before main program reads
+            f.flush()
+            os.fsync(f.fileno())
 
         return selected  # Return what we wrote
 
-    except FileNotFoundError:
-        # file doesn't exist yet, just wait
-        return None
     except Exception as e:
         # unexpected error - write generic error message
         error_msg = "ERROR: Invalid format. Use outcome1:weight1,outcome2:weight2"
         try:
-            with open('weighted_selector.txt', 'w') as f:
+            with open('weighted_selector.txt', 'w', encoding='utf-8') as f:
                 f.write(error_msg)
+                # flush and sync to ensure data is on disk before main program reads
+                f.flush()
+                os.fsync(f.fileno())
         except:
             pass  # can't even write error, just continue
         return error_msg
@@ -151,30 +155,39 @@ def main():
 
     last_request = None
     last_output = None
+    last_mtime = None  # track last known file modification time
 
     while True:
         try:
-            # check if file exists and has content
-            with open('weighted_selector.txt', 'r') as f:
-                current_request = f.read()
+            # check modification time before reading file contents
+            current_mtime = os.path.getmtime('weighted_selector.txt')
 
-            # only process if content changed
-            if current_request and current_request != last_request:
-                # skip if it's an error message we wrote
-                if current_request.startswith('ERROR:'):
+            # only read file if modification time has changed
+            if current_mtime != last_mtime:
+                with open('weighted_selector.txt', 'r', encoding='utf-8') as f:
+                    current_request = f.read()
+
+                # only process if content changed
+                if current_request and current_request != last_request:
+                    # skip if it's an error message we wrote
+                    if current_request.startswith('ERROR:'):
+                        last_request = current_request
+                        last_mtime = current_mtime
+                        continue
+
+                    # skip if it's the output we just wrote
+                    if current_request == last_output:
+                        last_request = current_request
+                        last_mtime = current_mtime
+                        continue
+
+                    # process the request, passing already-read content to avoid second read
+                    print(f"Processing request: {current_request[:50]}...")
+                    last_output = process_request(current_request)  # Store what we wrote
                     last_request = current_request
-                    continue
+                    print("Result written to weighted_selector.txt")
 
-                # skip if it's the output we just wrote
-                if current_request == last_output:
-                    last_request = current_request
-                    continue
-
-                # process the request
-                print(f"Processing request: {current_request[:50]}...")
-                last_output = process_request()  # Store what we wrote
-                last_request = current_request
-                print("Result written to weighted_selector.txt")
+                last_mtime = current_mtime
 
         except FileNotFoundError:
             # file doesn't exist yet, that's fine
